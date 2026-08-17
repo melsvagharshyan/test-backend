@@ -1,0 +1,134 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum ShareKind {
+  USER
+  PUBLIC_LINK
+}
+
+enum ShareRole {
+  VIEWER
+  EDITOR
+}
+
+enum ResourceType {
+  DATA_ROOM
+  FOLDER
+  FILE
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  ownedRooms     DataRoom[]
+  grantedShares  Share[]    @relation("ShareGrantor")
+  receivedShares Share[]    @relation("ShareRecipient")
+
+  @@map("users")
+}
+
+model DataRoom {
+  id          String   @id @default(cuid())
+  name        String
+  ownerId     String
+  owner       User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  itemCount   Int      @default(0)
+  totalSize   BigInt   @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  folders Folder[]
+  files   File[]
+  shares  Share[]
+
+  @@index([ownerId, updatedAt(sort: Desc)])
+  @@map("data_rooms")
+}
+
+model Folder {
+  id         String    @id @default(cuid())
+  name       String
+  dataRoomId String
+  dataRoom   DataRoom  @relation(fields: [dataRoomId], references: [id], onDelete: Cascade)
+  parentId   String?
+  parent     Folder?   @relation("FolderTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children   Folder[]  @relation("FolderTree")
+  /// Stable uniqueness key: parent folder id, or "root" for the room root folder.
+  parentKey  String
+  /// Materialized ancestor path: /{rootId}/{...}/{thisId}
+  path       String
+  itemCount  Int       @default(0)
+  totalSize  BigInt    @default(0)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  files  File[]
+  shares Share[]
+
+  @@unique([dataRoomId, parentKey, name])
+  @@index([dataRoomId, parentId])
+  @@index([path])
+  @@map("folders")
+}
+
+model File {
+  id                 String   @id @default(cuid())
+  name               String
+  mimeType           String
+  size               Int
+  dataRoomId         String
+  dataRoom           DataRoom @relation(fields: [dataRoomId], references: [id], onDelete: Cascade)
+  folderId           String
+  folder             Folder   @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  cloudinaryPublicId String
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  shares Share[]
+
+  @@unique([folderId, name])
+  @@index([dataRoomId, folderId, name])
+  @@index([folderId, createdAt(sort: Desc)])
+  @@map("files")
+}
+
+model Share {
+  id             String       @id @default(cuid())
+  kind           ShareKind
+  role           ShareRole    @default(VIEWER)
+  resourceType   ResourceType
+  dataRoomId     String?
+  dataRoom       DataRoom?    @relation(fields: [dataRoomId], references: [id], onDelete: Cascade)
+  folderId       String?
+  folder         Folder?      @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  fileId         String?
+  file           File?        @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  grantorId      String
+  grantor        User         @relation("ShareGrantor", fields: [grantorId], references: [id], onDelete: Cascade)
+  recipientId    String?
+  recipient      User?        @relation("ShareRecipient", fields: [recipientId], references: [id], onDelete: SetNull)
+  recipientEmail String?
+  token          String?      @unique
+  createdAt      DateTime     @default(now())
+  revokedAt      DateTime?
+
+  @@index([recipientId, revokedAt])
+  @@index([recipientEmail, revokedAt])
+  @@index([dataRoomId, revokedAt])
+  @@index([folderId, revokedAt])
+  @@index([fileId, revokedAt])
+  @@index([token])
+  @@map("shares")
+}
