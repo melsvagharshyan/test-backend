@@ -34,7 +34,15 @@ for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
   );
 
   if (result.status === 0) {
-    const app = spawnSync('node', ['dist/main'], {
+    const fs = require('node:fs');
+    const entry = ['dist/main.js', 'dist/src/main.js'].find((file) =>
+      fs.existsSync(file),
+    );
+    if (!entry) {
+      console.error('Built app not found. Expected dist/main.js');
+      process.exit(1);
+    }
+    const app = spawnSync('node', [entry], {
       stdio: 'inherit',
       env: process.env,
     });
