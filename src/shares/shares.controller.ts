@@ -3,9 +3,11 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
   Param,
   Post,
   Query,
+  StreamableFile,
 } from '@nestjs/common';
 import { SharesService } from './shares.service';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -64,5 +66,22 @@ export class SharesController {
     @Param('fileId') fileId: string,
   ) {
     return { data: await this.sharesService.publicPreview(token, fileId) };
+  }
+
+  @Public()
+  @Get('public/:token/files/:fileId/content')
+  @Header('Content-Type', 'application/pdf')
+  async publicContent(
+    @Param('token') token: string,
+    @Param('fileId') fileId: string,
+  ) {
+    const { file, buffer } = await this.sharesService.publicDownload(
+      token,
+      fileId,
+    );
+    return new StreamableFile(buffer, {
+      type: 'application/pdf',
+      disposition: `inline; filename="${file.name.replace(/"/g, '')}"`,
+    });
   }
 }

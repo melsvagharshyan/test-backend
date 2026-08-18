@@ -67,14 +67,33 @@ export class StorageService implements OnModuleInit {
 
   signedPreviewUrl(publicId: string): { url: string; expiresAt: string } {
     const expiresAt = Math.floor(Date.now() / 1000) + PREVIEW_TTL_SECONDS;
-    const url = cloudinary.url(publicId, {
+    const url = cloudinary.utils.private_download_url(publicId, '', {
+      resource_type: 'raw',
+      type: 'authenticated',
+      expires_at: expiresAt,
+      attachment: false,
+    });
+    return { url, expiresAt: new Date(expiresAt * 1000).toISOString() };
+  }
+
+  async download(publicId: string): Promise<Buffer> {
+    const { url } = this.signedPreviewUrl(publicId);
+    const response = await fetch(url, { redirect: 'follow' });
+    if (response.ok) {
+      return Buffer.from(await response.arrayBuffer());
+    }
+
+    const fallbackUrl = cloudinary.url(publicId, {
       resource_type: 'raw',
       type: 'authenticated',
       sign_url: true,
       secure: true,
-      expires_at: expiresAt,
     });
-    return { url, expiresAt: new Date(expiresAt * 1000).toISOString() };
+    const fallback = await fetch(fallbackUrl, { redirect: 'follow' });
+    if (!fallback.ok) {
+      throw new InternalServerErrorException('Failed to load the stored file');
+    }
+    return Buffer.from(await fallback.arrayBuffer());
   }
 
   async delete(publicId: string): Promise<void> {

@@ -3,10 +3,12 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
   Param,
   Patch,
   Post,
   Query,
+  StreamableFile,
   UploadedFiles,
   UseInterceptors,
 } from '@nestjs/common';
@@ -42,6 +44,16 @@ export class FilesController {
   @Get('files/:id')
   async preview(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return { data: await this.filesService.preview(user, id) };
+  }
+
+  @Get('files/:id/content')
+  @Header('Content-Type', 'application/pdf')
+  async content(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    const { file, buffer } = await this.filesService.download(user, id);
+    return new StreamableFile(buffer, {
+      type: 'application/pdf',
+      disposition: `inline; filename="${file.name.replace(/"/g, '')}"`,
+    });
   }
 
   @Patch('files/:id')

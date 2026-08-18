@@ -241,6 +241,25 @@ export class SharesService {
     return { file: toFileDto(file), ...signed };
   }
 
+  async publicDownload(token: string, fileId: string) {
+    const context = await this.access.resolvePublicShare(token);
+    const file = await this.prisma.file.findUnique({
+      where: { id: fileId },
+      include: { folder: true },
+    });
+    if (!file || file.dataRoomId !== context.dataRoomId) {
+      throw new NotFoundException('File not found');
+    }
+    this.access.assertPublicCanReadFile(
+      context,
+      file.folder.path,
+      file.folderId,
+      file.id,
+    );
+    const buffer = await this.storage.download(file.cloudinaryPublicId);
+    return { file, buffer };
+  }
+
   private async assertOwnerOfResource(
     user: AuthUser,
     resourceType: ResourceType,

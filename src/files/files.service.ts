@@ -202,6 +202,13 @@ export class FilesService {
     };
   }
 
+  async download(user: AuthUser, fileId: string) {
+    await this.access.assertFileAccess(user, fileId, 'read');
+    const file = await this.requireFile(fileId);
+    const buffer = await this.storage.download(file.cloudinaryPublicId);
+    return { file, buffer };
+  }
+
   private async requireFile(fileId: string) {
     const file = await this.prisma.file.findUnique({ where: { id: fileId } });
     if (!file) {
