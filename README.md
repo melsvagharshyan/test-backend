@@ -1,98 +1,71 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Acme Data Room — API
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+NestJS backend for the Data Room MVP: JWT auth, PostgreSQL via Prisma, Cloudinary for PDF bytes, and share-aware authorization.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+Product overview, ERD, and scale answers live in the [root README](../README.md).
 
-## Description
+## Hosted URL
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+https://test-backend-production-382b.up.railway.app/api/health
 
-## Project setup
+API prefix: `/api`
+
+## Design decisions (backend)
+
+- **Modules by domain:** `auth`, `users`, `data-rooms`, `folders`, `files`, `shares`, `access`, `storage`, `prisma`.
+- **Global JWT guard** with `@Public()` only on register/login, health, and public-link routes.
+- **Authorization in `AccessService`:** owner of the room, or an active `USER` share whose resource contains the requested folder/file. Public links use the token only — no login.
+- **Folder uniqueness:** `@@unique([dataRoomId, parentKey, name])`. `parentKey` is `"root"` or the parent folder id so root-level names stay unique without a nullable unique column.
+- **File uniqueness:** `@@unique([folderId, name])`. Duplicate uploads/renames/moves call `resolveUniqueName` (`Report (2).pdf`).
+- **Deletes:** `GET /folders/:id/delete-preview` returns counts and sample names before `DELETE`. Cascade is DB `onDelete: Cascade` plus Cloudinary cleanup.
+- **PDF delivery:** Cloudinary `raw` + `authenticated`. Preview/download is proxied (`GET /files/:id/content`) so the browser is not blocked by Cloudinary iframe/auth headers.
+
+## Setup
 
 ```bash
-$ pnpm install
+cp .env.example .env
+pnpm install
+pnpm prisma:generate
+pnpm prisma:migrate:dev
+pnpm start:dev
 ```
 
-## Compile and run the project
+### Environment
 
-```bash
-# development
-$ pnpm run start
+| Variable | Purpose |
+| --- | --- |
+| `DATABASE_URL` | PostgreSQL URL (local or Railway **private** URL in the same project) |
+| `JWT_SECRET` | Required. App will not boot without it |
+| `FRONTEND_URL` | CORS origins, comma-separated, no trailing slash |
+| `CLOUDINARY_CLOUD_NAME` | Cloudinary cloud |
+| `CLOUDINARY_API_KEY` | Cloudinary key |
+| `CLOUDINARY_API_SECRET` | Cloudinary secret |
+| `CLOUDINARY_FOLDER` | Prefix for public IDs (`data-room`) |
+| `PORT` | Defaults to `3000`; Railway injects this |
 
-# watch mode
-$ pnpm run start:dev
+## Scripts
 
-# production mode
-$ pnpm run start:prod
-```
+| Script | What it does |
+| --- | --- |
+| `pnpm start:dev` | Watch mode |
+| `pnpm build` | `prisma generate` + `nest build` |
+| `pnpm railway:start` | `prisma migrate deploy` then `node dist/main.js` |
+| `pnpm test` | Unit tests (naming + share scope) |
 
-## Run tests
+## Railway
 
-```bash
-# unit tests
-$ pnpm run test
+Postgres and this API **must be in the same Railway project** or `*.railway.internal` will not resolve.
 
-# e2e tests
-$ pnpm run test:e2e
+Start command: `pnpm railway:start`  
+Healthcheck: `/api/health`
 
-# test coverage
-$ pnpm run test:cov
-```
+## Where AI was used (backend)
 
-## Deployment
+Cursor generated first-pass Nest modules, Prisma models, DTO validators, and the Railway/Prisma 7 adapter wiring. I specified and then reviewed:
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+- Share scope rules (room vs folder subtree vs single file)
+- Incremental folder aggregates
+- Unique-name helper and tests
+- Streaming PDFs through Nest instead of returning a Cloudinary URL to an iframe
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
-```bash
-$ pnpm install -g @nestjs/mau
-$ mau deploy
-```
-
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+AI also helped diagnose production boot failures (`JWT_SECRET` missing, Node 18 vs Prisma 7, `dist/src/main.js` vs `dist/main.js`). Those fixes are in `nixpacks.toml`, `tsconfig.build.json`, and `scripts/railway-start.cjs`.
