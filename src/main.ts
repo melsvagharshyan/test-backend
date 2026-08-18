@@ -13,7 +13,7 @@ async function bootstrap() {
     }),
   );
 
-  const origins = 'https://test-frontend-sepia-five.vercel.app'
+  const origins = (process.env.FRONTEND_URL ?? 'http://localhost:5173')
     .split(',')
     .map((origin) => origin.trim().replace(/\/$/, ''))
     .filter(Boolean);
