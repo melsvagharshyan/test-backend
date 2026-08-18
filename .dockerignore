@@ -1,0 +1,10 @@
+node_modules
+dist
+.env
+.env.*
+!.env.example
+docker-compose.yml
+coverage
+.tmp
+.temp
+*.log
